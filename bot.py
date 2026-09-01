@@ -20,7 +20,7 @@ print("▶️ इंतज़ार ख़त्म! अब वीडियो बन�
 # ==========================================
 import edge_tts
 from gtts import gTTS
-from moviepy.editor import ColorClip, AudioFileClip, TextClip, ImageClip, CompositeVideoClip, CompositeAudioClip
+from moviepy.editor import AudioFileClip, TextClip, ImageClip, CompositeVideoClip, CompositeAudioClip
 from moviepy.audio.AudioClip import AudioClip
 
 from google.oauth2.credentials import Credentials
@@ -31,16 +31,15 @@ from googleapiclient.errors import HttpError
 
 OUTPUT_FOLDER = "./output"
 TEMP_FOLDER = "./temp"
-LOGO_PATH = "./logo.png"
 JSON_FILE_PATH = "./questions.json"
 TOKENS_FOLDER = "./tokens"  
+BG_IMAGE_PATH = "./bg_template.jpg" # 🌟 आपकी नई डिज़ाइन वाली फोटो
+HINDI_FONT = "./NirmalaB.ttf" # 🌟 गिटहब पर मौजूद फॉन्ट फाइल
 
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
-HINDI_FONT = "./NirmalaB.ttf" 
-
-# 🚀 नया फंक्शन: जो सवाल यूज़ होगा, वो डिलीट हो जाएगा
+# 🚀 जो सवाल यूज़ होगा, वो डिलीट हो जाएगा
 def get_quiz_data():
     with open(JSON_FILE_PATH, 'r', encoding='utf-8') as f:
         questions_list = json.load(f)
@@ -65,7 +64,8 @@ def get_quiz_data():
 async def generate_voice(text, filename):
     filepath = os.path.join(TEMP_FOLDER, filename)
     try:
-        communicate = edge_tts.Communicate(text, "hi-IN-MadhurNeural", rate="+5%", volume="+50%")
+        # 🚀 आवाज़ की स्पीड +20% (ताकि ऑडियंस बोर न हो)
+        communicate = edge_tts.Communicate(text, "hi-IN-MadhurNeural", rate="+20%", volume="+50%")
         await communicate.save(filepath)
         return filepath
     except:
@@ -147,11 +147,28 @@ async def make_one_video():
     quiz = get_quiz_data()
     print(f"\n✨ सवाल चुना गया: {quiz['question']}")
     
-    q_path = await generate_voice(f"प्रश्न है। {quiz['question']}", "q.mp3")
-    a_path = await generate_voice(quiz['speak_a'], "a.mp3")
-    b_path = await generate_voice(quiz['speak_b'], "b.mp3")
-    c_path = await generate_voice(quiz['speak_c'], "c.mp3")
-    ans_path = await generate_voice(quiz['answer_text'], "ans.mp3")
+    # 🧹 टेक्स्ट को साफ़ करना (A, B, C हटाना)
+    text_a = quiz['opt_a'].replace("A)", "").replace("A.", "").strip()
+    text_b = quiz['opt_b'].replace("B)", "").replace("B.", "").strip()
+    text_c = quiz['opt_c'].replace("C)", "").replace("C.", "").strip()
+
+    correct_key = quiz['correct_key']
+    if correct_key == 'A': correct_ans_text = text_a
+    elif correct_key == 'B': correct_ans_text = text_b
+    else: correct_ans_text = text_c
+
+    # 🎙️ सीधा और फ़ास्ट बोलने के लिए स्क्रिप्ट तैयार
+    speech_q = quiz['question']
+    speech_a = f"ए, {text_a}"
+    speech_b = f"बी, {text_b}"
+    speech_c = f"सी, {text_c}"
+    speech_ans = f"सही जवाब है, {correct_ans_text}"
+
+    q_path = await generate_voice(speech_q, "q.mp3")
+    a_path = await generate_voice(speech_a, "a.mp3")
+    b_path = await generate_voice(speech_b, "b.mp3")
+    c_path = await generate_voice(speech_c, "c.mp3")
+    ans_path = await generate_voice(speech_ans, "ans.mp3")
 
     aud_q = AudioFileClip(q_path).volumex(1.5)
     aud_a = AudioFileClip(a_path).volumex(1.5)
@@ -159,52 +176,70 @@ async def make_one_video():
     aud_c = AudioFileClip(c_path).volumex(1.5)
     aud_ans = AudioFileClip(ans_path).volumex(1.5)
 
+    # ⏱️ Timing Logic 
     t = 0.0
-    s_q = t; t += aud_q.duration + 0.3
-    s_a = t; t += aud_a.duration + 0.3
-    s_b = t; t += aud_b.duration + 0.3
-    s_c = t; t += aud_c.duration + 0.5
+    s_q = t; t += aud_q.duration + 0.2
+    s_a = t; t += aud_a.duration + 0.2
+    s_b = t; t += aud_b.duration + 0.2
+    s_c = t; t += aud_c.duration + 0.3
     timer_dur = 5.0
     s_timer = t; t += timer_dur
     s_ans = t; t += aud_ans.duration + 1.0
     total = t
 
-    bg = ColorClip(size=(1080, 1920), color=(20, 20, 25), duration=total).set_fps(24)
-    header = TextClip("🧠 QUIZ CHALLENGE ⏱️", fontsize=70, color='yellow', font='Arial-Bold').set_position(('center', 150)).set_duration(total)
-    q_clip = TextClip(quiz['question'], fontsize=80, color='white', font=HINDI_FONT, method='caption', size=(900, None)).set_position(('center', 350)).set_start(s_q).set_duration(total - s_q)
+    # 🌟 बैकग्राउंड इमेज लोड करना
+    if not os.path.exists(BG_IMAGE_PATH):
+        print(f"❌ Error: {BG_IMAGE_PATH} नहीं मिली! GitHub पर इमेज अपलोड करें।")
+        sys.exit(1)
+    bg = ImageClip(BG_IMAGE_PATH).resize((1080, 1920)).set_duration(total).set_fps(24)
 
-    ox = 200
-    opt_a = TextClip(quiz['opt_a'], fontsize=85, color='white', font=HINDI_FONT).set_position((ox, 750)).set_start(s_a).set_duration(total - s_a)
-    opt_b = TextClip(quiz['opt_b'], fontsize=85, color='white', font=HINDI_FONT).set_position((ox, 900)).set_start(s_b).set_duration(total - s_b)
-    opt_c = TextClip(quiz['opt_c'], fontsize=85, color='white', font=HINDI_FONT).set_position((ox, 1050)).set_start(s_c).set_duration(total - s_c)
+    # 🎯 1. QUESTION ALIGNMENT
+    q_clip = TextClip(quiz['question'], fontsize=75, color='white', font=HINDI_FONT, method='caption', size=(850, None), align='center').set_position(('center', 570)).set_start(s_q).set_duration(total - s_q)
+
+    # 🎯 2. A, B, C ALIGNMENT (गोलों के बीच में)
+    circle_x = 105 
+    y_a, y_b, y_c = 975, 1165, 1355 
+    lbl_a = TextClip("A", fontsize=80, color='black', font='Arial-Bold').set_position((circle_x, y_a)).set_start(s_a).set_duration(total - s_a)
+    lbl_b = TextClip("B", fontsize=80, color='black', font='Arial-Bold').set_position((circle_x, y_b)).set_start(s_b).set_duration(total - s_b)
+    lbl_c = TextClip("C", fontsize=80, color='black', font='Arial-Bold').set_position((circle_x, y_c)).set_start(s_c).set_duration(total - s_c)
+
+    # 🎯 3. OPTIONS ALIGNMENT (नीले बॉक्स के अंदर)
+    text_x = 280 
+    opt_a = TextClip(text_a, fontsize=70, color='white', font=HINDI_FONT).set_position((text_x, y_a)).set_start(s_a).set_duration(total - s_a)
+    opt_b = TextClip(text_b, fontsize=70, color='white', font=HINDI_FONT).set_position((text_x, y_b)).set_start(s_b).set_duration(total - s_b)
+    opt_c = TextClip(text_c, fontsize=70, color='white', font=HINDI_FONT).set_position((text_x, y_c)).set_start(s_c).set_duration(total - s_c)
 
     pop_a = make_pop_sfx().set_start(s_a)
     pop_b = make_pop_sfx().set_start(s_b)
     pop_c = make_pop_sfx().set_start(s_c)
 
+    # 🎯 4. TIMER ALIGNMENT
     timer_vis = []
-    colors = {5:'lime', 4:'yellow', 3:'orange', 2:'#FF4500', 1:'red'}
+    colors = {5:'yellow', 4:'yellow', 3:'yellow', 2:'white', 1:'white'} 
     for i in range(int(timer_dur)):
         tl = int(timer_dur) - i
         ts = s_timer + i
-        c = TextClip("⭕", fontsize=350, color='white', font='Arial').set_position(('center', 1300)).set_start(ts).set_duration(1.0)
-        n = TextClip(f"{tl}", fontsize=180, color=colors.get(tl,'white'), font=HINDI_FONT).set_position(('center', 1400)).set_start(ts).set_duration(1.0)
-        timer_vis.extend([c, n])
+        n = TextClip(f"{tl}", fontsize=120, color=colors.get(tl,'white'), font='Arial-Bold').set_position((520, 1535)).set_start(ts).set_duration(1.0)
+        timer_vis.append(n)
 
     tick = make_tick_sfx(timer_dur).set_start(s_timer)
 
+    # ✅ Answer Highlight (Green)
     ans_clip = None
-    if quiz['correct_key'] == 'A': ans_clip = TextClip(quiz['opt_a'], fontsize=85, color='#00FF00', font=HINDI_FONT).set_position((ox, 750)).set_start(s_ans).set_duration(total - s_ans)
-    elif quiz['correct_key'] == 'B': ans_clip = TextClip(quiz['opt_b'], fontsize=85, color='#00FF00', font=HINDI_FONT).set_position((ox, 900)).set_start(s_ans).set_duration(total - s_ans)
-    elif quiz['correct_key'] == 'C': ans_clip = TextClip(quiz['opt_c'], fontsize=85, color='#00FF00', font=HINDI_FONT).set_position((ox, 1050)).set_start(s_ans).set_duration(total - s_ans)
+    ans_color = '#00FF00' 
+    if correct_key == 'A': 
+        ans_clip = TextClip(text_a, fontsize=70, color=ans_color, font=HINDI_FONT).set_position((text_x, y_a)).set_start(s_ans).set_duration(total - s_ans)
+    elif correct_key == 'B': 
+        ans_clip = TextClip(text_b, fontsize=70, color=ans_color, font=HINDI_FONT).set_position((text_x, y_b)).set_start(s_ans).set_duration(total - s_ans)
+    elif correct_key == 'C': 
+        ans_clip = TextClip(text_c, fontsize=70, color=ans_color, font=HINDI_FONT).set_position((text_x, y_c)).set_start(s_ans).set_duration(total - s_ans)
 
     ding = make_ding_sfx().set_start(s_ans)
-    logo = ImageClip(LOGO_PATH).resize(width=150).set_position((880, 50)).set_duration(total) if os.path.exists(LOGO_PATH) else None
-
+    
+    # 🎬 Compile Everything
     final_audio = CompositeAudioClip([aud_q.set_start(s_q), aud_a.set_start(s_a), pop_a, aud_b.set_start(s_b), pop_b, aud_c.set_start(s_c), pop_c, tick, ding, aud_ans.set_start(s_ans)])
-    visuals = [bg, header, q_clip, opt_a, opt_b, opt_c] + timer_vis
+    visuals = [bg, q_clip, lbl_a, lbl_b, lbl_c, opt_a, opt_b, opt_c] + timer_vis
     if ans_clip: visuals.append(ans_clip)
-    if logo: visuals.append(logo)
 
     video = CompositeVideoClip(visuals).set_audio(final_audio)
     out_path = os.path.join(OUTPUT_FOLDER, "short.mp4")
@@ -218,8 +253,10 @@ async def make_one_video():
     success = upload_to_youtube(out_path, quiz['question'])
     
     # Cleanup
-    os.remove(out_path)
-    for f in os.listdir(TEMP_FOLDER): os.remove(os.path.join(TEMP_FOLDER, f))
+    if os.path.exists(out_path): os.remove(out_path)
+    for f in os.listdir(TEMP_FOLDER): 
+        try: os.remove(os.path.join(TEMP_FOLDER, f))
+        except: pass
     
     if not success:
         sys.exit(1)
