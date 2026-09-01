@@ -9,6 +9,10 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    
+    # ⚠️ यह लाइन बहुत ज़रूरी है ताकि गिटहब फाइल डिलीट करके सेव (Commit) कर सके
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout Code
@@ -49,3 +53,11 @@ jobs:
     - name: Run Auto-Bot
       run: |
         python bot.py
+
+    - name: Commit updated questions.json
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git add questions.json
+        git commit -m "🤖 सवाल इस्तेमाल किया और डिलीट कर दिया" || echo "No changes to commit"
+        git push
