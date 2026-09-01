@@ -1,0 +1,51 @@
+name: 24/Day Random YouTube Uploader
+
+on:
+  schedule:
+    # हर 1 घंटे में गिटहब जॉब स्टार्ट करेगा (दिन की 24 जॉब)
+    - cron: '0 * * * *'
+  workflow_dispatch: 
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install System Dependencies (ImageMagick & Fixes)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg imagemagick
+        # गिटहब सर्वर पर TextClip चलाने के लिए सिक्यूरिटी फिक्स
+        sudo sed -i 's/rights="none"/rights="read|write"/' /etc/ImageMagick-6/policy.xml
+
+    - name: Install Python Libraries
+      run: |
+        pip install --upgrade pip
+        pip install moviepy==1.0.3 edge-tts gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib Pillow imageio-ffmpeg
+
+    - name: Load All YouTube Tokens
+      env:
+        TOKEN_1: ${{ secrets.TOKEN_1 }}
+        TOKEN_2: ${{ secrets.TOKEN_2 }}
+        TOKEN_3: ${{ secrets.TOKEN_3 }}
+        TOKEN_4: ${{ secrets.TOKEN_4 }}
+      run: |
+        mkdir -p tokens
+        # जो भी टोकन सीक्रेट में मिलेगा, उसे डिकोड करके फाइल बना देगा
+        if [ ! -z "$TOKEN_1" ]; then echo "$TOKEN_1" | base64 -d > tokens/token1.json; fi
+        if [ ! -z "$TOKEN_2" ]; then echo "$TOKEN_2" | base64 -d > tokens/token2.json; fi
+        if [ ! -z "$TOKEN_3" ]; then echo "$TOKEN_3" | base64 -d > tokens/token3.json; fi
+        if [ ! -z "$TOKEN_4" ]; then echo "$TOKEN_4" | base64 -d > tokens/token4.json; fi
+        echo "✅ Tokens लोड हो गए हैं!"
+
+    - name: Run Auto-Bot
+      run: |
+        python bot.py
