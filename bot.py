@@ -6,8 +6,12 @@ import asyncio
 import sys
 import numpy as np
 
+# 🛠️ MoviePy PIL Error Fix (100% Safe)
+from PIL import Image
+if not hasattr(Image, 'ANTIALIAS'):
+    Image.ANTIALIAS = Image.LANCZOS
+
 # ⏱️ RANDOM WAIT SYSTEM (0 से 25 मिनट रुकेगा)
-# GitHub इसे हर घंटे चलाएगा, लेकिन वीडियो रैंडम टाइम पर ही डलेगी!
 wait_seconds = random.randint(0, 1500)
 print(f"🤖 GitHub Server चालू! वीडियो रेंडर करने से पहले {wait_seconds // 60} मिनट का रैंडम इंतज़ार कर रहा है...")
 time.sleep(wait_seconds)
@@ -29,18 +33,34 @@ OUTPUT_FOLDER = "./output"
 TEMP_FOLDER = "./temp"
 LOGO_PATH = "./logo.png"
 JSON_FILE_PATH = "./questions.json"
-TOKENS_FOLDER = "./tokens"  # GitHub Actions इसे खुद बनाएगा
+TOKENS_FOLDER = "./tokens"  
 
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
-# ⚠️ Linux सर्वर पर हिंदी के लिए कस्टम फॉन्ट का पाथ
 HINDI_FONT = "./NirmalaB.ttf" 
 
+# 🚀 नया फंक्शन: जो सवाल यूज़ होगा, वो डिलीट हो जाएगा
 def get_quiz_data():
     with open(JSON_FILE_PATH, 'r', encoding='utf-8') as f:
         questions_list = json.load(f)
-    return random.choice(questions_list)
+        
+    if len(questions_list) == 0:
+        print("❌ सारे सवाल ख़त्म हो गए हैं! कृपया questions.json में नए सवाल डालें।")
+        sys.exit(1)
+
+    # रैंडम सवाल चुनो
+    selected_quiz = random.choice(questions_list)
+    
+    # उस सवाल को लिस्ट से हटा दो (Delete)
+    questions_list.remove(selected_quiz)
+    
+    # बची हुई लिस्ट को वापस JSON में सेव कर दो
+    with open(JSON_FILE_PATH, 'w', encoding='utf-8') as f:
+        json.dump(questions_list, f, ensure_ascii=False, indent=4)
+        
+    print(f"🗑️ सवाल इस्तेमाल हो गया, अब इसे JSON से डिलीट कर दिया गया है। बचे हुए सवाल: {len(questions_list)}")
+    return selected_quiz
 
 async def generate_voice(text, filename):
     filepath = os.path.join(TEMP_FOLDER, filename)
@@ -66,7 +86,6 @@ def make_tick_sfx(duration=5.0):
 def make_ding_sfx():
     return AudioClip(lambda t: np.vstack([np.sin(2 * np.pi * 800 * t) * np.exp(-5 * t)]*2).T, duration=1.5, fps=44100).volumex(1.5)
 
-# 🚀 SMART UPLOAD SYSTEM (4 Tokens Support)
 def upload_to_youtube(video_file, quiz_question):
     print("🌐 YouTube सर्वर से कनेक्ट हो रहा है...")
     
@@ -203,7 +222,7 @@ async def make_one_video():
     for f in os.listdir(TEMP_FOLDER): os.remove(os.path.join(TEMP_FOLDER, f))
     
     if not success:
-        sys.exit(1) # अगर लिमिट खत्म, तो जॉब फ़ेल कर दो
+        sys.exit(1)
 
 if __name__ == "__main__":
     asyncio.run(make_one_video())
