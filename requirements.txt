@@ -1,0 +1,4 @@
+instagrapi
+moviepy
+imageio-ffmpeg
+Pillow==9.5.0
