@@ -1,11 +1,15 @@
-name: Test Long Video Auto-Uploader
+name: 50-Q Mega Quiz Auto-Uploader
 
 on:
+  schedule:
+    # ⏰ यह क्रॉन जॉब हर 2 घंटे में ऑटोमैटिक चलेगी (दिन की 12 जॉब्स)
+    - cron: '0 */2 * * *'
   workflow_dispatch: 
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    timeout-minutes: 150 # 50 सवाल और रैंडम इंतज़ार के लिए 2.5 घंटे की लिमिट
     permissions:
       contents: write
 
@@ -46,5 +50,5 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git add questions.json
-        git commit -m "🤖 4 टेस्ट सवाल इस्तेमाल किए और डिलीट कर दिए" || echo "No changes to commit"
+        git commit -m "🤖 50 सवाल डिलीट किए और 1 वीडियो अपलोड की" || echo "No changes to commit"
         git push
