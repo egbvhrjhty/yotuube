@@ -1,17 +1,13 @@
-name: Mega Quiz Auto-Uploader (Long Video)
+name: Test Auto-Video Maker
 
 on:
-  schedule:
-    # यह बॉट हर दिन सुबह 8:00 बजे (UTC 02:30) और शाम 6:00 बजे चलेगा
-    - cron: '30 2,12 * * *'
   workflow_dispatch: 
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 180 # ⚠️ वीडियो लंबी है इसलिए GitHub को 3 घंटे का टाइमआउट दिया है
     permissions:
-      contents: write
+      contents: read
 
     steps:
     - name: Checkout Code
@@ -31,26 +27,14 @@ jobs:
     - name: Install Python Libraries
       run: |
         pip install --upgrade pip
-        pip install moviepy==1.0.3 edge-tts gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib Pillow==9.5.0 imageio-ffmpeg
+        pip install moviepy==1.0.3 edge-tts gtts numpy Pillow==9.5.0 imageio-ffmpeg
 
-    - name: Load All YouTube Tokens
-      env:
-        TOKEN_1: ${{ secrets.TOKEN_1 }}
-        TOKEN_2: ${{ secrets.TOKEN_2 }}
-      run: |
-        mkdir -p tokens
-        if [ ! -z "$TOKEN_1" ]; then echo "$TOKEN_1" | base64 -d > tokens/token1.json; fi
-        if [ ! -z "$TOKEN_2" ]; then echo "$TOKEN_2" | base64 -d > tokens/token2.json; fi
-        echo "✅ Tokens लोड हो गए हैं!"
-
-    - name: Run Auto-Bot for 100 Questions
+    - name: Run Video Bot
       run: |
         python bot.py
 
-    - name: Commit updated questions.json
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add questions.json
-        git commit -m "🤖 100 सवाल इस्तेमाल किए गए और वीडियो अपलोड हो गई" || echo "No changes to commit"
-        git push
+    - name: 📥 Upload Video For Download (Artifact)
+      uses: actions/upload-artifact@v4
+      with:
+        name: My-Test-Video
+        path: output/FINAL_UPLOAD.mp4
