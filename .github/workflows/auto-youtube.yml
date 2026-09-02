@@ -1,16 +1,15 @@
-name: 24/Day Random YouTube Uploader
+name: Mega Quiz Auto-Uploader (Long Video)
 
 on:
   schedule:
-    # हर 1 घंटे में गिटहब जॉब स्टार्ट करेगा (दिन की 24 जॉब)
-    - cron: '0 * * * *'
+    # यह बॉट हर दिन सुबह 8:00 बजे (UTC 02:30) और शाम 6:00 बजे चलेगा
+    - cron: '30 2,12 * * *'
   workflow_dispatch: 
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    
-    # ⚠️ यह लाइन बहुत ज़रूरी है ताकि गिटहब फाइल डिलीट करके सेव (Commit) कर सके
+    timeout-minutes: 180 # ⚠️ वीडियो लंबी है इसलिए GitHub को 3 घंटे का टाइमआउट दिया है
     permissions:
       contents: write
 
@@ -23,11 +22,10 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install System Dependencies (ImageMagick & Fixes)
+    - name: Install System Dependencies (FFmpeg & ImageMagick)
       run: |
         sudo apt-get update
         sudo apt-get install -y ffmpeg imagemagick
-        # गिटहब सर्वर पर TextClip चलाने के लिए सिक्यूरिटी फिक्स
         sudo sed -i 's/rights="none"/rights="read|write"/' /etc/ImageMagick-6/policy.xml
 
     - name: Install Python Libraries
@@ -39,18 +37,13 @@ jobs:
       env:
         TOKEN_1: ${{ secrets.TOKEN_1 }}
         TOKEN_2: ${{ secrets.TOKEN_2 }}
-        TOKEN_3: ${{ secrets.TOKEN_3 }}
-        TOKEN_4: ${{ secrets.TOKEN_4 }}
       run: |
         mkdir -p tokens
-        # जो भी टोकन सीक्रेट में मिलेगा, उसे डिकोड करके फाइल बना देगा
         if [ ! -z "$TOKEN_1" ]; then echo "$TOKEN_1" | base64 -d > tokens/token1.json; fi
         if [ ! -z "$TOKEN_2" ]; then echo "$TOKEN_2" | base64 -d > tokens/token2.json; fi
-        if [ ! -z "$TOKEN_3" ]; then echo "$TOKEN_3" | base64 -d > tokens/token3.json; fi
-        if [ ! -z "$TOKEN_4" ]; then echo "$TOKEN_4" | base64 -d > tokens/token4.json; fi
         echo "✅ Tokens लोड हो गए हैं!"
 
-    - name: Run Auto-Bot
+    - name: Run Auto-Bot for 100 Questions
       run: |
         python bot.py
 
@@ -59,5 +52,5 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git add questions.json
-        git commit -m "🤖 सवाल इस्तेमाल किया और डिलीट कर दिया" || echo "No changes to commit"
+        git commit -m "🤖 100 सवाल इस्तेमाल किए गए और वीडियो अपलोड हो गई" || echo "No changes to commit"
         git push
