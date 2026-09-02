@@ -45,14 +45,12 @@ TOTAL_QUESTIONS = 4
 if not os.path.exists(BGM_FILE):
     print("📥 BGM नहीं मिला, ऑटोमैटिक कूल म्यूजिक डाउनलोड कर रहा हूँ...")
     try:
-        # No-copyright lofi/suspense beat
         urllib.request.urlretrieve("https://cdn.pixabay.com/download/audio/2022/05/16/audio_91b2c451db.mp3", BGM_FILE)
         print("✅ BGM डाउनलोड हो गया!")
     except:
         print("⚠️ BGM डाउनलोड फेल हो गया।")
 
 # ================== PERFECT HINDI TEXT GENERATOR (PIL) ==================
-# यह फंक्शन मात्राओं को टूटने नहीं देगा!
 def get_hindi_image_clip(text, filename, font_size, color_rgb, width_limit=50):
     font = ImageFont.truetype(HINDI_FONT, font_size)
     lines = textwrap.wrap(text, width=width_limit) 
@@ -103,7 +101,6 @@ async def generate_voice(text, filename, voice_type="male"):
     filepath = os.path.join(TEMP_FOLDER, filename)
     voice_name = "hi-IN-MadhurNeural" if voice_type == "male" else "hi-IN-SwaraNeural"
     try:
-        # Speed +0% for crystal clear voice
         communicate = edge_tts.Communicate(text, voice_name, rate="+0%", volume="+50%")
         await communicate.save(filepath)
         return filepath
@@ -113,9 +110,6 @@ async def generate_voice(text, filename, voice_type="male"):
         return filepath
 
 # ================== SYNTHETIC SFX ==================
-def make_pop_sfx():
-    return AudioClip(lambda t: np.vstack([np.sin(2 * np.pi * 600 * t) * np.exp(-30 * t)]*2).T, duration=0.2, fps=44100).volumex(1.5)
-
 def make_tick_sfx(duration=5.0):
     def sound_wave(t):
         t_mod = t % 1.0
@@ -128,12 +122,8 @@ def create_thumbnail(first_question_text):
     print("🎨 Thumbnail बना रहा है...")
     img = Image.new('RGB', (1920, 1080), color = (20, 20, 40))
     d = ImageDraw.Draw(img)
-    try:
-        font_large = ImageFont.truetype(HINDI_FONT, 120)
-        font_small = ImageFont.truetype(HINDI_FONT, 80)
-    except:
-        font_large = ImageFont.load_default()
-        font_small = font_large
+    try: font_large = ImageFont.truetype(HINDI_FONT, 120); font_small = ImageFont.truetype(HINDI_FONT, 80)
+    except: font_large = ImageFont.load_default(); font_small = font_large
 
     d.text((100, 150), f"🔥 {TOTAL_QUESTIONS} MEGA GK QUIZ 🔥", fill=(255, 200, 0), font=font_large)
     d.text((100, 400), first_question_text[:50] + "...", fill=(255, 255, 255), font=font_small)
@@ -157,11 +147,10 @@ async def make_video_chunk(quiz, index):
 
     is_last = (index == TOTAL_QUESTIONS)
     
-    # 🗣️ Voice Logic Setup
+    # 🗣️ Voice Logic: Boy reads Q+Opts, Girl reads Ans
     speech_q_opts = f"{quiz['question']}... ऑप्शन ए, {text_a}... ऑप्शन बी, {text_b}... ऑप्शन सी, {text_c}"
     speech_ans = "इसका जवाब आप कमेंट्स में बताइए!" if is_last else f"सही जवाब है, {correct_ans_text}"
 
-    # Boy reads Q & Opts, Girl reads Answer
     q_opts_path = await generate_voice(speech_q_opts, f"q_{index}.mp3", "male")
     ans_path = await generate_voice(speech_ans, f"a_{index}.mp3", "female")
 
@@ -178,12 +167,12 @@ async def make_video_chunk(quiz, index):
 
     bg = ColorClip(size=(1920, 1080), color=bg_color).set_duration(total).set_fps(24)
     
-    # Top Progress & Level
+    # Top Texts
     lvl_text = "LEVEL: EASY" if index <= (TOTAL_QUESTIONS * 0.3) else "LEVEL: MEDIUM" if index <= (TOTAL_QUESTIONS * 0.7) else "LEVEL: HARD 🔥"
     lvl_clip = TextClip(lvl_text, fontsize=45, color='yellow', font='Arial-Bold').set_position((50, 40)).set_start(0).set_duration(total)
     prog_clip = TextClip(f"Q: {index}/{TOTAL_QUESTIONS}", fontsize=45, color='white', font='Arial-Bold').set_position((1700, 40)).set_start(0).set_duration(total)
 
-    # 🔠 Perfect Hindi Rendering
+    # Perfect Hindi Texts
     q_clip = get_hindi_image_clip(quiz['question'], f"img_q_{index}.png", 85, (255,255,255)).set_position(('center', 150)).set_start(0).set_duration(total)
     
     y_opts = 450
@@ -201,16 +190,14 @@ async def make_video_chunk(quiz, index):
         n = TextClip(f"{tl}", fontsize=130, color='red' if tl<=3 else 'yellow', font='Arial-Bold').set_position(('center', 800)).set_start(ts).set_duration(1.0)
         timer_vis.append(n)
 
-    # ✅ Animated Answer Highlight (Bounce/Pop)
+    # ✅ Animated Answer Highlight (Green Bounce)
     ans_clip = None
     if not is_last:
         y_ans = y_opts if correct_key == 'A' else (y_opts+130) if correct_key == 'B' else (y_opts+260)
         ans_text = f"{correct_key}) " + (text_a if correct_key == 'A' else text_b if correct_key == 'B' else text_c)
         ans_clip = get_hindi_image_clip(ans_text, f"img_ans_{index}.png", 75, (0, 255, 0), 60)
         ans_clip = ans_clip.set_position((250, y_ans)).set_start(s_ans).set_duration(total - s_ans)
-        
-        # ✨ The Pop Animation
-        ans_clip = ans_clip.resize(lambda t: min(1.15, 1 + t*1.5) if t < 0.1 else 1.15)
+        ans_clip = ans_clip.resize(lambda t: min(1.15, 1 + t*1.5) if t < 0.1 else 1.15) # Pop Anim
 
     final_audio = CompositeAudioClip([aud_q_opts.set_start(s_q_opts), tick, aud_ans.set_start(s_ans)])
     visuals = [bg, lvl_clip, prog_clip, q_clip, opt_a_clip, opt_b_clip, opt_c_clip] + timer_vis
@@ -244,8 +231,9 @@ def merge_videos_and_add_bgm(chunk_files):
     os.system(f"ffmpeg -f concat -safe 0 -i {concat_txt} -c copy {merged_no_bgm} -y")
     
     if os.path.exists(BGM_FILE):
-        print("🎵 बैकग्राउंड म्यूजिक (BGM) लगाया जा रहा है...")
-        cmd = f'ffmpeg -i {merged_no_bgm} -stream_loop -1 -i {BGM_FILE} -filter_complex "[1:a]volume=0.08[bgm];[0:a][bgm]amix=inputs=2:duration=first[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac {final_output} -y'
+        print("🎵 बैकग्राउंड म्यूजिक (BGM) लगाया जा रहा है (High Volume)...")
+        # 🔊 Volume increased to 0.25 (25%)
+        cmd = f'ffmpeg -i {merged_no_bgm} -stream_loop -1 -i {BGM_FILE} -filter_complex "[1:a]volume=0.25[bgm];[0:a][bgm]amix=inputs=2:duration=first[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac {final_output} -y'
         os.system(cmd)
     else:
         os.rename(merged_no_bgm, final_output)
@@ -258,7 +246,7 @@ def upload_to_youtube(video_file, thumbnail_file):
     token_files = sorted([os.path.join(TOKENS_FOLDER, f) for f in os.listdir(TOKENS_FOLDER) if f.endswith('.json')])
     
     yt_title = "4 Most Important GK Questions in Hindi 🔥 | Test Mode"
-    yt_desc = "Testing Video Setup.\n\n#gk #gkinhindi #test"
+    yt_desc = "Testing our Final Auto Video Setup!\n\n#gk #gkinhindi #test"
     
     request_body = {
         "snippet": {"title": yt_title, "description": yt_desc, "tags": ["gk", "hindi"], "categoryId": "27"},
