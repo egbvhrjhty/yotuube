@@ -7,10 +7,14 @@ import sys
 import numpy as np
 import subprocess
 from PIL import Image, ImageDraw, ImageFont
+from gtts import gTTS  # Backup Voice System
 
-# 🛠️ MoviePy PIL Error Fix 
-if not hasattr(Image, 'ANTIALIAS'):
-    Image.ANTIALIAS = Image.LANCZOS
+# 🛠️ MoviePy PIL Error & Deprecation Fix (100% Safe)
+try:
+    resample_filter = Image.Resampling.LANCZOS
+except AttributeError:
+    resample_filter = Image.ANTIALIAS
+Image.ANTIALIAS = resample_filter
 
 import edge_tts
 from moviepy.editor import AudioFileClip, TextClip, ColorClip, CompositeVideoClip, CompositeAudioClip
@@ -33,15 +37,16 @@ THUMBNAIL_FILE = "./output/thumbnail.jpg"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
-TOTAL_QUESTIONS = 100 # एक वीडियो में 100 सवाल
+# 🧪 TEST MODE: सिर्फ 4 सवाल लेगा! (बाद में इसे 100 कर देंगे)
+TOTAL_QUESTIONS = 4 
 
 # ================== DATA LOGIC ==================
-def get_100_questions():
+def get_questions():
     with open(JSON_FILE_PATH, 'r', encoding='utf-8') as f:
         questions_list = json.load(f)
         
     if len(questions_list) < TOTAL_QUESTIONS:
-        print(f"❌ सवाल कम हैं! केवल {len(questions_list)} बचे हैं। कम से कम 100 चाहिए।")
+        print(f"❌ सवाल कम हैं! केवल {len(questions_list)} बचे हैं। कम से कम {TOTAL_QUESTIONS} चाहिए।")
         sys.exit(1)
 
     selected_quizzes = questions_list[:TOTAL_QUESTIONS]
@@ -50,21 +55,29 @@ def get_100_questions():
     with open(JSON_FILE_PATH, 'w', encoding='utf-8') as f:
         json.dump(remaining_quizzes, f, ensure_ascii=False, indent=4)
         
-    print(f"🗑️ 100 सवाल निकाल लिए गए और JSON से डिलीट कर दिए गए। बचे हुए सवाल: {len(remaining_quizzes)}")
+    print(f"🗑️ {TOTAL_QUESTIONS} सवाल निकाल लिए गए और JSON से डिलीट कर दिए गए। बचे हुए सवाल: {len(remaining_quizzes)}")
     return selected_quizzes
 
-# ================== DUAL VOICE TTS ==================
+# ================== DUAL VOICE TTS (WITH BACKUP) ==================
 async def generate_voice(text, filename, voice_type="male"):
     filepath = os.path.join(TEMP_FOLDER, filename)
-    # लड़के की आवाज़ (सवाल के लिए)
     voice_name = "hi-IN-MadhurNeural" if voice_type == "male" else "hi-IN-SwaraNeural"
+    
     try:
+        # 1st Try: Edge TTS (Premium Voice)
         communicate = edge_tts.Communicate(text, voice_name, rate="+15%", volume="+50%")
         await communicate.save(filepath)
         return filepath
     except Exception as e:
-        print(f"TTS Error: {e}")
-        return None
+        print(f"⚠️ Edge-TTS Error: {e}. Backup (gTTS) का इस्तेमाल कर रहा हूँ...")
+        # 2nd Try: gTTS (Google Fallback - Never Crashes)
+        try:
+            tts = gTTS(text=text, lang='hi', slow=False)
+            tts.save(filepath)
+            return filepath
+        except Exception as e2:
+            print(f"❌ Critical Audio Error: {e2}")
+            sys.exit(1)
 
 # ================== SYNTHETIC SFX ==================
 def make_pop_sfx():
@@ -73,7 +86,7 @@ def make_pop_sfx():
 def make_tick_sfx(duration=5.0):
     def sound_wave(t):
         t_mod = t % 1.0
-        click = np.sin(2 * np.pi * 1000 * t_mod) * np.exp(-60 * t_mod) # Heartbeat like tension
+        click = np.sin(2 * np.pi * 1000 * t_mod) * np.exp(-60 * t_mod)
         return np.where(t_mod < 0.1, click, 0)
     return AudioClip(lambda t: np.vstack([sound_wave(t), sound_wave(t)]).T, duration=duration, fps=44100).volumex(2.0)
 
@@ -89,7 +102,7 @@ def create_thumbnail(first_question_text):
         font_large = ImageFont.load_default()
         font_small = font_large
 
-    d.text((100, 150), "🔥 100 MEGA GK QUIZ 🔥", fill=(255, 200, 0), font=font_large)
+    d.text((100, 150), f"🔥 {TOTAL_QUESTIONS} MEGA GK QUIZ 🔥", fill=(255, 200, 0), font=font_large)
     d.text((100, 400), first_question_text[:50] + "...", fill=(255, 255, 255), font=font_small)
     d.text((100, 800), "99% लोग फेल! 🤔", fill=(255, 50, 50), font=font_large)
     
@@ -98,27 +111,24 @@ def create_thumbnail(first_question_text):
 
 # ================== VIDEO GENERATOR LOOP ==================
 async def make_video_chunk(quiz, index):
-    print(f"\n🎬 रेंडर हो रहा है सवाल {index}/100: {quiz['question']}")
+    print(f"\n🎬 रेंडर हो रहा है सवाल {index}/{TOTAL_QUESTIONS}: {quiz['question']}")
     
-    # Levels Logic (Background Colors)
-    if index <= 30: bg_color = (15, 32, 39) # Easy (Dark Blue)
-    elif index <= 70: bg_color = (66, 39, 9) # Medium (Dark Orange)
-    else: bg_color = (60, 10, 10) # Hard (Dark Red Suspense)
+    # Levels Logic
+    if index <= (TOTAL_QUESTIONS * 0.3): bg_color = (15, 32, 39) 
+    elif index <= (TOTAL_QUESTIONS * 0.7): bg_color = (66, 39, 9) 
+    else: bg_color = (60, 10, 10) 
 
-    # Clean text
     text_a = quiz['opt_a'].replace("A)", "").strip()
     text_b = quiz['opt_b'].replace("B)", "").strip()
     text_c = quiz['opt_c'].replace("C)", "").strip()
     correct_key = quiz['correct_key']
     correct_ans_text = text_a if correct_key == 'A' else text_b if correct_key == 'B' else text_c
 
-    # 100th Question Logic (Mystery Question)
-    is_last = (index == 100)
+    is_last = (index == TOTAL_QUESTIONS)
     speech_q = quiz['question']
     speech_opts = f"ए, {text_a}... बी, {text_b}... सी, {text_c}"
     speech_ans = "इसका जवाब आप कमेंट्स में बताइए!" if is_last else f"सही जवाब है, {correct_ans_text}"
 
-    # Generate Voices (Male for Q, Female for Options/Ans)
     q_path = await generate_voice(speech_q, f"q_{index}.mp3", "male")
     opts_path = await generate_voice(speech_opts, f"o_{index}.mp3", "female")
     ans_path = await generate_voice(speech_ans, f"a_{index}.mp3", "female")
@@ -127,7 +137,6 @@ async def make_video_chunk(quiz, index):
     aud_opts = AudioFileClip(opts_path).volumex(1.2)
     aud_ans = AudioFileClip(ans_path).volumex(1.5)
 
-    # Timing
     t = 0.0
     s_q = t; t += aud_q.duration + 0.5
     s_opts = t; t += aud_opts.duration + 0.5
@@ -136,18 +145,14 @@ async def make_video_chunk(quiz, index):
     s_ans = t; t += aud_ans.duration + 1.5
     total = t
 
-    # Visuals - Landscape 1920x1080
     bg = ColorClip(size=(1920, 1080), color=bg_color).set_duration(total).set_fps(24)
     
-    # Progress Bar & Level Text
-    lvl_text = "LEVEL: EASY" if index <= 30 else "LEVEL: MEDIUM" if index <= 70 else "LEVEL: HARD 🔥"
+    lvl_text = "LEVEL: EASY" if index <= (TOTAL_QUESTIONS * 0.3) else "LEVEL: MEDIUM" if index <= (TOTAL_QUESTIONS * 0.7) else "LEVEL: HARD 🔥"
     lvl_clip = TextClip(lvl_text, fontsize=50, color='yellow', font='Arial-Bold').set_position((50, 40)).set_start(0).set_duration(total)
-    prog_clip = TextClip(f"Q: {index}/100", fontsize=50, color='white', font='Arial-Bold').set_position((1650, 40)).set_start(0).set_duration(total)
+    prog_clip = TextClip(f"Q: {index}/{TOTAL_QUESTIONS}", fontsize=50, color='white', font='Arial-Bold').set_position((1650, 40)).set_start(0).set_duration(total)
 
-    # Question Text
     q_clip = TextClip(quiz['question'], fontsize=80, color='white', font=HINDI_FONT, method='caption', size=(1700, None), align='center').set_position(('center', 150)).set_start(s_q).set_duration(total - s_q)
 
-    # Options Alignment (Horizontal stacked)
     y_opts = 450
     opt_a_clip = TextClip(f"A) {text_a}", fontsize=70, color='white', font=HINDI_FONT).set_position((200, y_opts)).set_start(s_opts).set_duration(total - s_opts)
     opt_b_clip = TextClip(f"B) {text_b}", fontsize=70, color='white', font=HINDI_FONT).set_position((200, y_opts+120)).set_start(s_opts).set_duration(total - s_opts)
@@ -156,7 +161,6 @@ async def make_video_chunk(quiz, index):
     pop = make_pop_sfx().set_start(s_opts)
     tick = make_tick_sfx(timer_dur).set_start(s_timer)
 
-    # Timer Visual
     timer_vis = []
     for i in range(int(timer_dur)):
         tl = int(timer_dur) - i
@@ -164,7 +168,6 @@ async def make_video_chunk(quiz, index):
         n = TextClip(f"{tl}", fontsize=150, color='red' if tl<=3 else 'yellow', font='Arial-Bold').set_position(('center', 800)).set_start(ts).set_duration(1.0)
         timer_vis.append(n)
 
-    # Answer Highlight
     ans_clip = None
     if not is_last:
         y_ans = y_opts if correct_key == 'A' else (y_opts+120) if correct_key == 'B' else (y_opts+240)
@@ -183,7 +186,6 @@ async def make_video_chunk(quiz, index):
     out_path = os.path.join(TEMP_FOLDER, f"chunk_{index}.mp4")
     video.write_videofile(out_path, codec="libx264", audio_codec="aac", fps=24, preset="ultrafast", logger=None)
     
-    # Memory Cleanup (CRITICAL FOR GITHUB)
     for c in visuals: c.close()
     video.close(); final_audio.close(); aud_q.close(); aud_opts.close(); aud_ans.close()
     
@@ -191,7 +193,7 @@ async def make_video_chunk(quiz, index):
 
 # ================== MERGE & BGM (FFMPEG) ==================
 def merge_videos_and_add_bgm(chunk_files):
-    print("🔄 सारे 100 वीडियो जोड़े जा रहे हैं (FFmpeg Superfast)...")
+    print(f"🔄 सारे {TOTAL_QUESTIONS} वीडियो जोड़े जा रहे हैं (FFmpeg Superfast)...")
     concat_txt = os.path.join(TEMP_FOLDER, "files.txt")
     with open(concat_txt, "w") as f:
         for chunk in chunk_files:
@@ -200,13 +202,10 @@ def merge_videos_and_add_bgm(chunk_files):
     merged_no_bgm = os.path.join(OUTPUT_FOLDER, "merged_no_bgm.mp4")
     final_output = os.path.join(OUTPUT_FOLDER, "FINAL_UPLOAD.mp4")
     
-    # 1. Join Chunks
     os.system(f"ffmpeg -f concat -safe 0 -i {concat_txt} -c copy {merged_no_bgm} -y")
     
-    # 2. Add BGM (if exists)
     if os.path.exists(BGM_FILE):
         print("🎵 बैकग्राउंड म्यूजिक (BGM) मिक्स किया जा रहा है...")
-        # Stream loop BGM, mix audio, map properly
         cmd = f'ffmpeg -i {merged_no_bgm} -stream_loop -1 -i {BGM_FILE} -filter_complex "[1:a]volume=0.1[bgm];[0:a][bgm]amix=inputs=2:duration=first[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac {final_output} -y'
         os.system(cmd)
     else:
@@ -220,11 +219,11 @@ def upload_to_youtube(video_file, thumbnail_file):
     print("🌐 YouTube सर्वर से कनेक्ट हो रहा है...")
     token_files = sorted([os.path.join(TOKENS_FOLDER, f) for f in os.listdir(TOKENS_FOLDER) if f.endswith('.json')])
     
-    yt_title = "100 Most Important GK Questions in Hindi 🔥 | Mega Quiz Challenge | GK in Hindi"
-    yt_desc = "इस वीडियो में 100 सबसे महत्वपूर्ण GK सवाल हैं जो आपके दिमाग को हिला देंगे! Easy से लेकर Hard लेवल तक! \n\n100वें सवाल का जवाब कमेंट में ज़रूर बताएं! 👇\n\n#gk #gkinhindi #megaquiz #gkquestions #education"
+    yt_title = f"{TOTAL_QUESTIONS} Most Important GK Questions in Hindi 🔥 | Mega Quiz Test"
+    yt_desc = "Testing our Auto Long Video Generator system! \n\nआखिरी सवाल का जवाब कमेंट में ज़रूर बताएं! 👇\n\n#gk #gkinhindi #megaquiz #gkquestions #education"
     
     request_body = {
-        "snippet": {"title": yt_title, "description": yt_desc, "tags": ["gk", "hindi gk", "mega quiz", "100 gk questions"], "categoryId": "27"},
+        "snippet": {"title": yt_title, "description": yt_desc, "tags": ["gk", "hindi gk", "test quiz"], "categoryId": "27"},
         "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
     }
 
@@ -237,14 +236,12 @@ def upload_to_youtube(video_file, thumbnail_file):
                     
             youtube = build('youtube', 'v3', credentials=creds)
             
-            # Upload Video
             media = MediaFileUpload(video_file, chunksize=-1, resumable=True)
             request = youtube.videos().insert(part="snippet,status", body=request_body, media_body=media)
             response = request.execute()
             video_id = response['id']
             print(f"✅ तहलका! लॉन्ग वीडियो LIVE हो गया: https://youtu.be/{video_id}")
             
-            # Upload Thumbnail
             youtube.thumbnails().set(videoId=video_id, media_body=MediaFileUpload(thumbnail_file)).execute()
             print("✅ थंबनेल भी सफलतापूर्वक सेट हो गया!")
             return True
@@ -255,10 +252,10 @@ def upload_to_youtube(video_file, thumbnail_file):
 
 # ================== MAIN EXECUTION ==================
 async def main():
-    print(f"🤖 GitHub Server चालू! {random.randint(5, 15)} मिनट का इंतज़ार कर रहा है...")
-    time.sleep(random.randint(300, 900)) # 5 to 15 mins wait
+    print("🤖 GitHub Server चालू! टेस्टिंग के लिए केवल 5 सेकंड इंतज़ार कर रहा है...")
+    time.sleep(5) # Fast testing wait
     
-    quizzes = get_100_questions()
+    quizzes = get_questions()
     create_thumbnail(quizzes[0]['question'])
     
     chunk_files = []
